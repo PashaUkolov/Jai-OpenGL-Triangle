@@ -6,7 +6,6 @@
 #import "String";
 #import "Math";
 
-
 Vertex :: struct {
     x : float;
     y : float;
@@ -16,8 +15,7 @@ Vertex :: struct {
 check_compile_errors :: (shader : GLuint) -> bool, info_log : string {
     success : s32;
     glGetShaderiv (shader, GL_COMPILE_STATUS, *success);
-    if !success
-    {
+    if !success {
         info_len : s32;
         glGetShaderiv (shader, GL_INFO_LOG_LENGTH, *info_len);
         info_data := cast (*u8) alloc (info_len, temp);
@@ -35,8 +33,7 @@ check_compile_errors :: (shader : GLuint) -> bool, info_log : string {
 check_link_errors :: (program : GLuint) -> bool, info_log : string {
     success : s32;
     glGetProgramiv (program, GL_LINK_STATUS, *success);
-    if !success
-    {
+    if !success {
         info_len : s32;
         glGetProgramiv (program, GL_INFO_LOG_LENGTH, *info_len);
         info_data := cast (*u8) alloc (info_len, temp);
@@ -80,8 +77,7 @@ main :: () {
     glShaderSource(vertexShader, 1, *vertexSource.data, null);
     glCompileShader(vertexShader);
     success, infoLog := check_compile_errors (vertexShader);
-	if !success
-	{
+	if !success {
 		log_error ("Could not compile vertex shader: %", infoLog);
 	}
     
@@ -97,30 +93,21 @@ main :: () {
     shaderID := glCreateProgram();
     glAttachShader(shaderID, vertexShader);
     glAttachShader(shaderID, fragmentShader);
-    
     glLinkProgram(shaderID);
     success, infoLog = check_link_errors (shaderID);
-	if !success
-	{
+	if !success {
 		log_error ("Could not link shader: %", success);
 	}
     
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
     
-    w : float = 100;
-	h : float = 100;
-	xpos : float = 10;
-	ypos : float = 10;
     vertices : [3] Vertex;
-    
     vertices[0] = .{-0.5, -0.5, 0.0};
     vertices[1] = .{0.5, -0.5, 0.0};
     vertices[2] = .{0.0, 0.5, 0.0};
-    //vertices[3] = .{w + xpos, ypos + h, 0.0};
     
-    vao : u32;
-    vbo : u32;
+    vao, vbo : u32;
     glGenVertexArrays(1, *vao);
     glBindVertexArray(vao);
     

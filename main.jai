@@ -5,20 +5,25 @@
 #import "Simp";
 #import "String";
 #import "Math";
+#import "stb_image";
+
+// #load "MidiInterface.jai";
 
 Vertex :: struct {
     x : float;
     y : float;
     z : float;
+    u : float;
+    v : float;
 }
 
 check_compile_errors :: (shader : GLuint) -> bool, info_log : string {
     success : s32;
-    glGetShaderiv (shader, GL_COMPILE_STATUS, *success);
+    glGetShaderiv(shader, GL_COMPILE_STATUS, *success);
     if !success {
         info_len : s32;
-        glGetShaderiv (shader, GL_INFO_LOG_LENGTH, *info_len);
-        info_data := cast (*u8) alloc (info_len, temp);
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, *info_len);
+        info_data := cast (*u8) alloc (info_len);
         glGetShaderInfoLog (shader, xx info_len, xx *info_len, info_data);
         result : string;
         result.data = info_data;
@@ -32,11 +37,11 @@ check_compile_errors :: (shader : GLuint) -> bool, info_log : string {
 
 check_link_errors :: (program : GLuint) -> bool, info_log : string {
     success : s32;
-    glGetProgramiv (program, GL_LINK_STATUS, *success);
+    glGetProgramiv(program, GL_LINK_STATUS, *success);
     if !success {
         info_len : s32;
-        glGetProgramiv (program, GL_INFO_LOG_LENGTH, *info_len);
-        info_data := cast (*u8) alloc (info_len, temp);
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, *info_len);
+        info_data := cast (*u8) alloc (info_len);
         glGetProgramInfoLog (program, xx info_len, xx *info_len, info_data);
         result : string;
         result.data = info_data;
@@ -52,19 +57,32 @@ main :: () {
     VERTEX_SHADER :: #string END
     #version 330
     layout (location = 0) in vec3 pos;
+    layout (location = 1) in vec2 texCoord;
+
+    out vec2 aTexCoord;
+
     uniform mat4 projection;
     void main() {
         gl_Position  = vec4(pos.x, pos.y, pos.z, 1.0);
+        aTexCoord = texCoord;
     }
     END
     
     FRAGMENT_SHADER :: #string END
     #version 330
     out vec4 color;
+
+    in vec2 aTexCoord;
+
+    uniform sampler2D myTexture;
+
     void main() {
-        color = vec4(0.2, 0.5, 0.0, 1.0);
+        color = texture(myTexture, aTexCoord);
+        // color = vec4(aTexCoord.x, aTexCoord.y, 0.0, 1.0);
     }
     END
+    
+    // createMidiDevice();
     
     WIDTH:= 500;
     HEIGHT:= 500;
@@ -102,21 +120,55 @@ main :: () {
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
     
-    vertices : [3] Vertex;
-    vertices[0] = .{-0.5, -0.5, 0.0};
-    vertices[1] = .{0.5, -0.5, 0.0};
-    vertices[2] = .{0.0, 0.5, 0.0};
+    vertices : [4] Vertex;
+    indices: [6] u32;
+
+    // vertices[0] = .{-0.5, -0.5, 0.0, 1.0, 1.0};
+    // vertices[1] = .{0.5, -0.5, 0.0, 1.0, 0.0};
+    // vertices[2] = .{-0.5, 0.5, 0.0, 0.0, 1.0};
+    vertices[0] = .{0.5, 0.5, 0.0, 1.0, 1.0};
+    vertices[1] = .{0.5, -0.5, 0.0, 1.0, 0.0};
+    vertices[2] = .{-0.5, -0.5, 0.0, 0.0, 0.0};
+    vertices[3] = .{-0.5, 0.5, 0.0, 0.0, 1.0};
+
+    indices = .[0, 1, 3, 1, 2, 3];
     
     vao, vbo : u32;
+    ebo : u32;
     glGenVertexArrays(1, *vao);
     glBindVertexArray(vao);
     
+    glGenBuffers(1, *ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, size_of(u32) * 6, *indices, GL_STATIC_DRAW);
+
     glGenBuffers(1, *vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, size_of(Vertex) * 3, *vertices, GL_STATIC_DRAW); 
-    
+    glBufferData(GL_ARRAY_BUFFER, size_of(Vertex) * 4, *vertices, GL_STATIC_DRAW); 
+
+    h, w, channels : s32;
+    data := stbi_load("Sprite.png", *w, *h, *channels, 0);
+    defer stbi_image_free(data);
+
+    if !data {
+        print("failed to load an image");
+    }
+
+    print("texture width %, texture height %", w, h);
+
+    texture : GLuint;
+    glGenTextures(1, *texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cast(u32)w, cast(u32)h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+   
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, size_of(Vertex), cast (*void) 0);
     glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, size_of(Vertex), cast(*void) (size_of(float) * 3));
+    glEnableVertexAttribArray(1);
     
     windowShouldClose := false;
     while !windowShouldClose {
@@ -128,12 +180,15 @@ main :: () {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(shaderID);
+        glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(vao);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
         
         //orthoProjection := orthographic_projection_matrix(0, cast(float)WIDTH, cast(float)HEIGHT, 0, 0, 1);
 		//glUniformMatrix4fv(glGetUniformLocation(shaderID, "projection"), 1, false, xx *orthoProjection);
         
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, cast(*void)0);
         
         for event : events_this_frame {
             if event.key_code == .ESCAPE {
